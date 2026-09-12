@@ -1,15 +1,11 @@
 import cv2
-import mediapipe as mp
 import numpy as np
-import time
 from collections import deque
-from mediapipe.python.solutions.drawing_utils import DrawingSpec
 
-# mp_face = mp.solutions.face_detection
-# face_detection = mp_face.FaceDetection(min_detection_confidence=0.5)
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
-mp_drawing = mp.solutions.drawing_utils
+import mp_face
+from mp_face import create_face_mesh
+
+face_mesh = create_face_mesh(num_faces=1, refine=True)
 
 LEFT_EYE = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
@@ -81,11 +77,14 @@ def bar(score, frame):
                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
 
 cap = cv2.VideoCapture(0)
-blink_counter = 0
+if not cap.isOpened():
+    print("Error: Could not open webcam. Please check camera permissions or index.")
+    exit(1)
 
 while True:
     ret, frame = cap.read()
     if not ret:
+        print("Error: Failed to grab frame from webcam.")
         break
 
     ui_bg = frame.copy()
@@ -94,21 +93,12 @@ while True:
 
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     image_h, image_w, _ = frame.shape
-    results = face_mesh.process(frame_rgb)
-    # face_results = face_detection.process(frame_rgb)
+    faces = face_mesh.process(frame_rgb)
 
-    if results.multi_face_landmarks:
-        for face_landmarks in results.multi_face_landmarks:
- 
-            mp_drawing.draw_landmarks(
-                frame, 
-                face_landmarks, 
-                mp_face_mesh.FACEMESH_CONTOURS,
-                landmark_drawing_spec=DrawingSpec(color=(0, 200, 0), thickness=1, circle_radius=1),
-                connection_drawing_spec=DrawingSpec(color=(0, 150, 255), thickness=1)
-            )
-
-            landmarks = face_landmarks.landmark
+    if faces:
+        face_mesh.draw(frame, faces)
+        for face in faces:
+            landmarks = face.landmark
             left_ear = eye_aspect_ratio(landmarks, LEFT_EYE, image_w, image_h)
             right_ear = eye_aspect_ratio(landmarks, RIGHT_EYE, image_w, image_h)
             avg_ear = (left_ear + right_ear) / 2
@@ -137,17 +127,6 @@ while True:
                 if distraction > 1000:
                     distraction = 0
                     print('turn off')
-    
-    # if face_results.detections:
-    #     for detection in face_results.detections:
-    #         bboxC = detection.location_data.relative_bounding_box
-    #         ih, iw, _ = frame.shape
-    #         x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
-            
-    #         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    #         cv2.rectangle(frame, (x, y), (x + w, y + 20), (0, 200, 0), -1)
-    #         cv2.putText(frame, "FACE DETECTED", (x + 5, y + 15), 
-    #                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
     
     fps = cap.get(cv2.CAP_PROP_FPS)
     cv2.putText(frame, f"FPS: {fps:.1f}", (image_w - 120, 30),
